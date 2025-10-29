@@ -1,0 +1,17 @@
+.{
+    .name = .logsearch,
+    .version = "0.0.0",
+    .fingerprint = 0x1eb6dc6698f2f446, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .MemMapper = .{
+            .url = "git+https://github.com/SuSonicTH/zigMemMapper.git?ref=master#2766febec287ecb399fe1a513b0e00b9cb486de9",
+            .hash = "MemMapper-0.2.1-cwAHKPEWAAAKELkr40GoQxjHGKYIsc72iGwR9qqr50Yu",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
