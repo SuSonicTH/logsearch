@@ -15,16 +15,8 @@ pub fn main() !void {
     //        _ = debug_allocator.deinit();
     //    };
 
-    const file = try std.fs.cwd().openFile("logs/BlackMed.log", .{});
-    defer file.close();
-
-    var mapper = try memMapper.init(file, false);
-    defer mapper.deinit();
-
-    const log = try mapper.map(u8, .{});
-    defer mapper.unmap(log);
-
-    var logIter = LogReader.init(log);
+    var logIter = try LogReader.init("logs/BlackMed.log");
+    defer logIter.deinit();
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
@@ -37,15 +29,31 @@ pub fn main() !void {
 }
 
 const LogReader = struct {
+    file: std.fs.File,
+    mapper: memMapper,
     data: []const u8,
     pos: u64 = 0,
     regex: mvzr.Regex,
 
-    pub fn init(data: []const u8) LogReader {
+    pub fn init(fileName: []const u8) !LogReader {
+        const file = try std.fs.cwd().openFile(fileName, .{});
+        errdefer file.close();
+
+        var mapper = try memMapper.init(file, false);
+        errdefer mapper.deinit();
+
         return .{
-            .data = data,
+            .file = file,
+            .mapper = mapper,
+            .data = try mapper.map(u8, .{}),
             .regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\]").?,
         };
+    }
+
+    pub fn deinit(self: *LogReader) void {
+        self.mapper.unmap(self.data);
+        self.mapper.deinit();
+        self.file.close();
     }
 
     pub fn next(self: *LogReader) ?LogLine {
