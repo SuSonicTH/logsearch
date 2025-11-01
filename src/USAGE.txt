@@ -1,0 +1,8 @@
+usage: logsearch [OPTIIONS] logfile...
+
+OPTIIONS:
+    --help               print this help screen
+    --version            print version and license
+
+    --level,-l <LEVEL>   only show level equal to <LEVEL> can be used multiple times
+    --search,-s <REGEG>  search for log messages matching <REGEX>

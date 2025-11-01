@@ -81,6 +81,9 @@ pub const Options = struct {
         if (self.files) |files| {
             files.deinit();
         }
+        if (self.expressions) |expressions| {
+            expressions.deinit();
+        }
     }
 
     pub fn addLevel(self: *Options, level: []const u8) !void {

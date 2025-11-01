@@ -31,6 +31,9 @@ pub fn build(b: *std.Build) void {
         exe.root_module.strip = true;
     }
 
+    const src = std.fs.cwd().openDir("./src", .{}) catch @panic("could not get ./src/ dir");
+    std.fs.cwd().copyFile("./LICENSE.txt", src, "LICENSE.txt", .{}) catch @panic("could not copy ./LICENSE.txt to ./src/LICENSE.txt");
+
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
