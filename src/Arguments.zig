@@ -24,7 +24,7 @@ pub fn parse(options: *LogSearch.Options, args: [][]const u8) !void {
         }
         if (arg[0] == '-') {
             switch (std.meta.stringToEnum(Argument, arg) orelse {
-                try exitError("Error: argument {d} is unknown '{s}'\n", .{ index, arg });
+                try exitError("error: argument {d} is unknown '{s}'\n", .{ index, arg });
             }) {
                 .@"--help" => try printInfoAndExit(version ++ "\n" ++ help),
                 .@"--version" => try printInfoAndExit(version ++ "\n\n" ++ license),
