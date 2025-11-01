@@ -20,6 +20,7 @@ pub fn main() !void {
     try options.addLevel("WARN");
     try options.addLevel("ERROR");
     try options.addFile("BlackMed.log");
+    try options.addExpression("Unable to find active contract for MSISDN");
 
     var logSearch = LogSearch.init(&options);
     defer logSearch.deinit();
