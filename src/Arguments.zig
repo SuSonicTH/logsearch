@@ -35,6 +35,10 @@ pub fn parse(options: *LogSearch.Options, args: [][]const u8) !void {
             try options.addFile(arg);
         }
     }
+
+    if (options.files == null) {
+        try exitError("error: missing file argument\n", .{});
+    }
 }
 
 fn argumentValue(args: [][]const u8, index: usize, argument: []const u8) ![]const u8 {

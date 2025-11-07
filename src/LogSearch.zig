@@ -20,10 +20,6 @@ pub fn run(self: *LogSearch) !void {
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    if (self.options.files == null) {
-        return error.NoFileGiven;
-    }
-
     for (self.options.files.?.items) |fileName| {
         var logIter = try LogReader.init(fileName);
         defer logIter.deinit();
