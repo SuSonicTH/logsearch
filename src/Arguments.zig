@@ -8,6 +8,8 @@ const Argument = enum {
     @"-l",
     @"--search",
     @"-s",
+    @"--class",
+    @"-c",
 };
 
 const version = "logsearch 0.1";
@@ -30,6 +32,7 @@ pub fn parse(options: *LogSearch.Options, args: [][]const u8) !void {
                 .@"--version" => try printInfoAndExit(version ++ "\n\n" ++ license),
                 .@"--level", .@"-l" => try options.addLevel(try argumentValue(args, index, arg)),
                 .@"--search", .@"-s" => try options.addExpression(try argumentValue(args, index, arg)),
+                .@"--class", .@"-c" => try options.addClass(try argumentValue(args, index, arg)),
             }
         } else {
             try options.addFile(arg);

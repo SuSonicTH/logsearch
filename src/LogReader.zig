@@ -21,7 +21,7 @@ pub fn init(fileName: []const u8) !LogReader {
         .file = file,
         .mapper = mapper,
         .data = try mapper.map(u8, .{}),
-        .regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\]").?,
+        .regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\] \\w+ ").?,
     };
 }
 
@@ -67,17 +67,31 @@ pub const LogLine = struct {
     time: []const u8,
     timeStamp: []const u8,
     level: []const u8,
+    class: []const u8,
     message: []const u8,
 
     fn get(line: []const u8, match: mvzr.Match) LogLine {
+        const levelStart = 25;
+        var levelEnd: usize = levelStart;
+        while (line[levelEnd] != ']') {
+            levelEnd += 1;
+        }
+
+        const classStart = levelEnd + 2;
+        var classEnd: usize = classStart;
+        while (line[classEnd] != ' ') {
+            classEnd += 1;
+        }
+
         return .{
             .line = line,
             .prefix = match.slice,
-            .message = line[match.slice.len + 1 ..],
+            .message = line[match.slice.len..],
             .date = line[0..10],
             .time = line[11..23],
             .timeStamp = line[0..23],
-            .level = line[25 .. match.slice.len - 1],
+            .level = line[levelStart..levelEnd],
+            .class = line[classStart..classEnd],
         };
     }
 };

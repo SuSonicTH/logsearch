@@ -5,7 +5,10 @@ OPTIIONS:
     --version            print version and license
 
     --level,-l <LEVEL>   only show level equal to <LEVEL>
-                         can be used multiple times
-
+    --class,-c <CLASS>   only show matching <CLASS>
     --search,-s <REGEX>  search for log messages matching <REGEX>
-                         can be used multiple times
+
+
+--level,--calss and --search can be used multiple times
+a line matching any of the given levels,classes or searches will be outputed
+one of each has to match for the line to be outputed

@@ -26,8 +26,9 @@ pub fn run(self: *LogSearch) !void {
 
         while (logIter.next()) |logline| {
             if (!self.levelMatches(logline.level)) continue;
+            if (!self.classMatches(logline.level)) continue;
             if (!self.messageMatches(logline.message)) continue;
-            try stdout.print("{s} {s} [{s}] {s}\n", .{ logline.date, logline.time, logline.level, logline.message });
+            try stdout.print("{s} {s} [{s}] {s} {s}\n", .{ logline.date, logline.time, logline.level, logline.class, logline.message });
             try stdout.flush();
         }
     }
@@ -38,6 +39,18 @@ inline fn levelMatches(self: *LogSearch, level: []const u8) bool {
     if (self.options.levels) |levels| {
         for (levels.items) |expectedLevel| {
             if (std.mem.eql(u8, expectedLevel, level)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return true;
+}
+
+inline fn classMatches(self: *LogSearch, class: []const u8) bool {
+    if (self.options.classes) |classes| {
+        for (classes.items) |expectedClass| {
+            if (std.mem.eql(u8, expectedClass, class)) {
                 return true;
             }
         }
@@ -61,8 +74,9 @@ inline fn messageMatches(self: *LogSearch, message: []const u8) bool {
 pub const Options = struct {
     allocator: std.mem.Allocator,
     levels: ?std.array_list.Managed([]const u8) = null,
-    files: ?std.array_list.Managed([]const u8) = null,
+    classes: ?std.array_list.Managed([]const u8) = null,
     expressions: ?std.array_list.Managed(mvzr.Regex) = null,
+    files: ?std.array_list.Managed([]const u8) = null,
 
     pub fn init(allocator: std.mem.Allocator) Options {
         return .{
@@ -87,6 +101,13 @@ pub const Options = struct {
             self.levels = std.array_list.Managed([]const u8).init(self.allocator);
         }
         try self.levels.?.append(level);
+    }
+
+    pub fn addClass(self: *Options, class: []const u8) !void {
+        if (self.classes == null) {
+            self.classes = std.array_list.Managed([]const u8).init(self.allocator);
+        }
+        try self.classes.?.append(class);
     }
 
     pub fn addExpression(self: *Options, regex: []const u8) !void {
