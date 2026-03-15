@@ -12,7 +12,7 @@ const Argument = enum {
     @"-c",
 };
 
-const version = "logsearch 0.1";
+const version = "logsearch 0.2";
 const help = @embedFile("USAGE.txt");
 const license = @embedFile("LICENSE.txt");
 
