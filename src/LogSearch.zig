@@ -16,7 +16,7 @@ pub fn deinit(self: *LogSearch) void {
 }
 
 pub fn run(self: *LogSearch) !void {
-    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
@@ -27,9 +27,9 @@ pub fn run(self: *LogSearch) !void {
         while (logIter.next()) |logline| {
             if (!self.levelMatches(logline.level)) continue;
             if (!self.classMatches(logline.class)) continue;
-            if (!self.messageMatches(logline.message)) continue;
-            try stdout.print("{s} {s} [{s}] {s} {s}\n", .{ logline.date, logline.time, logline.level, logline.class, logline.message });
-            //try stdout.writeAll(logline.line);
+            if (!self.textMatches(logline.text)) continue;
+            try stdout.writeAll(logline.line);
+            try stdout.writeByte('\n');
             try stdout.flush();
         }
     }
@@ -60,10 +60,10 @@ inline fn classMatches(self: *LogSearch, class: []const u8) bool {
     return true;
 }
 
-inline fn messageMatches(self: *LogSearch, message: []const u8) bool {
+inline fn textMatches(self: *LogSearch, text: []const u8) bool {
     if (self.options.expressions) |expressions| {
         for (expressions.items) |expression| {
-            if (expression.isMatch(message)) {
+            if (expression.isMatch(text)) {
                 return true;
             }
         }
