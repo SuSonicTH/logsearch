@@ -16,7 +16,7 @@ pub fn deinit(self: *LogSearch) void {
 }
 
 pub fn run(self: *LogSearch) !void {
-    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
@@ -26,9 +26,10 @@ pub fn run(self: *LogSearch) !void {
 
         while (logIter.next()) |logline| {
             if (!self.levelMatches(logline.level)) continue;
-            if (!self.classMatches(logline.level)) continue;
+            if (!self.classMatches(logline.class)) continue;
             if (!self.messageMatches(logline.message)) continue;
             try stdout.print("{s} {s} [{s}] {s} {s}\n", .{ logline.date, logline.time, logline.level, logline.class, logline.message });
+            //try stdout.writeAll(logline.line);
             try stdout.flush();
         }
     }
