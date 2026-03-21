@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const LogSearch = @import("LogSearch.zig");
+const LogReader = @import("LogReader.zig");
 const Arguments = @import("Arguments.zig");
 
 pub fn main() !void {
@@ -25,7 +26,8 @@ pub fn main() !void {
 
     try Arguments.parse(&options, arguments);
 
-    var logSearch = LogSearch.init(&options);
+    var matcher = try LogReader.Matcher.compile(&options.pattern);
+    var logSearch = LogSearch.init(&options, &matcher);
     defer logSearch.deinit();
 
     try logSearch.run();

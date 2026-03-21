@@ -8,9 +8,9 @@ file: std.fs.File,
 mapper: MemMapper,
 data: []const u8,
 pos: u64 = 0,
-regex: mvzr.Regex,
+matcher: *LogReader.Matcher,
 
-pub fn init(fileName: []const u8, regex: mvzr.Regex) !LogReader {
+pub fn init(fileName: []const u8, matcher: *LogReader.Matcher) !LogReader {
     const file = try std.fs.cwd().openFile(fileName, .{});
     errdefer file.close();
 
@@ -21,7 +21,7 @@ pub fn init(fileName: []const u8, regex: mvzr.Regex) !LogReader {
         .file = file,
         .mapper = mapper,
         .data = try mapper.map(u8, .{}),
-        .regex = regex,
+        .matcher = matcher,
     };
 }
 
@@ -43,9 +43,9 @@ pub fn next(self: *LogReader) ?LogLine {
         if (pos < self.data.len) {
             pos += 1;
         }
-        if (pos >= self.data.len or self.regex.isMatch(self.data[pos..])) {
+        if (pos >= self.data.len or self.matcher.line.isMatch(self.data[pos..])) {
             const line = self.getLineUpdatePos(pos);
-            return LogLine.get(line);
+            return LogLine.get(line, self.matcher);
         }
     }
 }
@@ -59,30 +59,98 @@ fn getLineUpdatePos(self: *LogReader, pos: u64) []const u8 {
     return self.data[start..end];
 }
 
+pub const Pattern = struct {
+    buffer: [4096]u8 = undefined,
+    time: []const u8 = "^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d",
+    level: []const u8 = "\\[[A-Za-z]+\\]",
+    class: []const u8 = "[^ ]+",
+    order: []const u8 = "tlc",
+
+    fn getLinePattern(self: *Pattern) ![]const u8 {
+        var fba: std.heap.FixedBufferAllocator = .init(&self.buffer);
+        const allocator = fba.allocator();
+
+        var pattern = std.array_list.Managed(u8).init(allocator);
+        defer pattern.deinit();
+
+        for (self.order) |patternType| {
+            switch (patternType) {
+                't' => {
+                    if (pattern.items.len > 0) try pattern.append(' ');
+                    try pattern.appendSlice(self.time);
+                },
+                'l' => {
+                    if (pattern.items.len > 0) try pattern.append(' ');
+                    try pattern.appendSlice(self.level);
+                },
+
+                'c' => {
+                    if (pattern.items.len > 0) try pattern.append(' ');
+                    try pattern.appendSlice(self.class);
+                },
+                else => @panic("unknown pattern type"),
+            }
+        }
+
+        return pattern.items;
+    }
+};
+
+pub const Matcher = struct {
+    line: mvzr.Regex,
+    time: mvzr.Regex,
+    level: mvzr.Regex,
+    class: mvzr.Regex,
+    order: []const u8,
+
+    pub fn compile(pattern: *Pattern) !Matcher {
+        return .{
+            .line = mvzr.compile(try pattern.getLinePattern()).?,
+            .time = mvzr.compile(pattern.time).?,
+            .level = mvzr.compile(pattern.level).?,
+            .class = mvzr.compile(pattern.class).?,
+            .order = pattern.order,
+        };
+    }
+};
+
 pub const LogLine = struct {
     line: []const u8,
     level: []const u8,
     class: []const u8,
     message: []const u8,
 
-    fn get(line: []const u8) LogLine {
-        const levelStart = 25;
-        var levelEnd: usize = levelStart;
-        while (line[levelEnd] != ']') {
-            levelEnd += 1;
-        }
+    fn get(line: []const u8, matcher: *LogReader.Matcher) LogLine {
+        var pos: usize = 0;
 
-        const classStart = levelEnd + 2;
-        var classEnd: usize = classStart;
-        while (line[classEnd] != ' ') {
-            classEnd += 1;
+        var level: []const u8 = "";
+        var class: []const u8 = "";
+
+        for (matcher.order) |patternType| {
+            switch (patternType) {
+                't' => {
+                    const match = matcher.time.match(line[pos..]).?;
+                    pos += match.end + 1;
+                },
+                'c' => {
+                    const match = matcher.class.match(line[pos..]).?;
+                    class = match.slice;
+                    pos += match.end + 1;
+                },
+                'l' => {
+                    const match = matcher.level.match(line[pos..]).?;
+                    level = match.slice;
+                    pos += match.end + 1;
+                },
+                else => unreachable,
+            }
         }
 
         return .{
             .line = line,
-            .level = line[levelStart..levelEnd],
-            .class = line[classStart..classEnd],
-            .message = line[classEnd + 2 ..],
+            .level = level,
+            .class = class,
+            .message = line[pos..],
         };
     }
 };

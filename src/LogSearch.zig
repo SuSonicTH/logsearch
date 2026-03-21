@@ -4,10 +4,12 @@ const mvzr = @import("mvzr");
 
 const LogSearch = @This();
 options: *Options,
+matcher: *LogReader.Matcher,
 
-pub fn init(options: *Options) LogSearch {
+pub fn init(options: *Options, matcher: *LogReader.Matcher) LogSearch {
     return .{
         .options = options,
+        .matcher = matcher,
     };
 }
 
@@ -15,14 +17,15 @@ pub fn deinit(self: *LogSearch) void {
     _ = self;
 }
 
+const line = "--------------------------------------------------------------------------------\n";
+
 pub fn run(self: *LogSearch) !void {
     var stdout_buffer: [4096]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
-    const regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\] \\w+ ").?;
     for (self.options.files.?.items) |fileName| {
-        var logIter = try LogReader.init(fileName, regex);
+        var logIter = try LogReader.init(fileName, self.matcher);
         defer logIter.deinit();
 
         while (logIter.next()) |logline| {
@@ -30,6 +33,8 @@ pub fn run(self: *LogSearch) !void {
             if (!self.classMatches(logline.class)) continue;
             if (!self.messageMatches(logline.message)) continue;
             try stdout.writeAll(logline.line);
+            try stdout.writeAll("\n");
+            if (self.options.outputLines) try stdout.writeAll(line);
             try stdout.flush();
         }
     }
@@ -78,6 +83,8 @@ pub const Options = struct {
     classes: ?std.array_list.Managed([]const u8) = null,
     expressions: ?std.array_list.Managed(mvzr.Regex) = null,
     files: ?std.array_list.Managed([]const u8) = null,
+    pattern: LogReader.Pattern = .{},
+    outputLines: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) Options {
         return .{
