@@ -10,7 +10,7 @@ data: []const u8,
 pos: u64 = 0,
 regex: mvzr.Regex,
 
-pub fn init(fileName: []const u8) !LogReader {
+pub fn init(fileName: []const u8, regex: mvzr.Regex) !LogReader {
     const file = try std.fs.cwd().openFile(fileName, .{});
     errdefer file.close();
 
@@ -21,7 +21,7 @@ pub fn init(fileName: []const u8) !LogReader {
         .file = file,
         .mapper = mapper,
         .data = try mapper.map(u8, .{}),
-        .regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\] \\w+ ").?,
+        .regex = regex,
     };
 }
 
@@ -45,8 +45,7 @@ pub fn next(self: *LogReader) ?LogLine {
         }
         if (pos >= self.data.len or self.regex.isMatch(self.data[pos..])) {
             const line = self.getLineUpdatePos(pos);
-            const match = self.regex.match(line).?;
-            return LogLine.get(line, match);
+            return LogLine.get(line);
         }
     }
 }
@@ -62,15 +61,11 @@ fn getLineUpdatePos(self: *LogReader, pos: u64) []const u8 {
 
 pub const LogLine = struct {
     line: []const u8,
-    prefix: []const u8,
-    date: []const u8,
-    time: []const u8,
-    timeStamp: []const u8,
     level: []const u8,
     class: []const u8,
     message: []const u8,
 
-    fn get(line: []const u8, match: mvzr.Match) LogLine {
+    fn get(line: []const u8) LogLine {
         const levelStart = 25;
         var levelEnd: usize = levelStart;
         while (line[levelEnd] != ']') {
@@ -85,13 +80,9 @@ pub const LogLine = struct {
 
         return .{
             .line = line,
-            .prefix = match.slice,
-            .message = line[match.slice.len..],
-            .date = line[0..10],
-            .time = line[11..23],
-            .timeStamp = line[0..23],
             .level = line[levelStart..levelEnd],
             .class = line[classStart..classEnd],
+            .message = line[classEnd + 2 ..],
         };
     }
 };

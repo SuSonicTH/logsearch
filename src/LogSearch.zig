@@ -20,16 +20,16 @@ pub fn run(self: *LogSearch) !void {
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
+    const regex = mvzr.compile("^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\] \\w+ ").?;
     for (self.options.files.?.items) |fileName| {
-        var logIter = try LogReader.init(fileName);
+        var logIter = try LogReader.init(fileName, regex);
         defer logIter.deinit();
 
         while (logIter.next()) |logline| {
             if (!self.levelMatches(logline.level)) continue;
             if (!self.classMatches(logline.class)) continue;
             if (!self.messageMatches(logline.message)) continue;
-            try stdout.print("{s} {s} [{s}] {s} {s}\n", .{ logline.date, logline.time, logline.level, logline.class, logline.message });
-            //try stdout.writeAll(logline.line);
+            try stdout.writeAll(logline.line);
             try stdout.flush();
         }
     }
