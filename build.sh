@@ -102,17 +102,17 @@ function build_platform() {
     #create release packages
     if [[ "$RELEASE" == "true" ]] && [[ "$PLAT" != "native" ]]; then
         echo packaging $PLAT
+        cd zig-out/bin/
         if [ "$SUFFIX" == ".exe" ]; then
-            cd zig-out/bin/
             if [ "$HOST_OS" == "windows" ]; then
                 zip a ../../bin/${APP_NAME}-${PLAT}.zip ${APP_NAME}.exe > /dev/null
             else
                 zip ../../bin/${APP_NAME}-${PLAT}.zip ${APP_NAME}.exe > /dev/null
             fi
-            cd ../../
         else
-            gzip -c zig-out/bin/${APP_NAME} > ./bin/${APP_NAME}-${PLAT}.gz
+            tar -cvzf ../../bin/${APP_NAME}-${PLAT}.tar.gz ${APP_NAME}
         fi
+        cd ../../
     fi
 }
 
