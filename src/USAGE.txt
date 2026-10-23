@@ -1,8 +1,9 @@
-usage: logsearch [OPTIIONS] logfile [logfile2]...
+usage: logsearch [OPTIONS] logfile [logfile2]...
 
-OPTIIONS:
+OPTIONS:
     --help               print this help screen
     --version            print version and license
+    --show-manual        show the manual (README) in a pager
 
   filtering:
     --level,-l <LEVEL>   only show level equal to <LEVEL>

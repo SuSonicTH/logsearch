@@ -2,20 +2,22 @@
     .name = .logsearch,
     .version = "0.0.0",
     .fingerprint = 0x1eb6dc6698f2f446, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
-        .MemMapper = .{
-            .url = "git+https://github.com/SuSonicTH/zigMemMapper.git?ref=master#2766febec287ecb399fe1a513b0e00b9cb486de9",
-            .hash = "MemMapper-0.2.1-cwAHKPEWAAAKELkr40GoQxjHGKYIsc72iGwR9qqr50Yu",
-        },
         .mvzr = .{
-            .url = "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.8.tar.gz",
-            .hash = "mvzr-0.3.7-ZSOky1dvAQDTEE_8S0pvpasmoEWQHVA29tMBdxL_hwra",
+            .path = "vendor/mvzr",
+        },
+        .zupx = .{
+            .url = "https://github.com/SuSonicTH/zupx/archive/refs/tags/v0.2.0.tar.gz",
+            .hash = "zupx-0.2.0-rouXWVAbAAAFN_K6ds95pGAgwMm0vkUf1VPaMDRRYG3o",
         },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
+        "vendor",
+        "LICENSE.txt",
+        "README.md",
     },
 }

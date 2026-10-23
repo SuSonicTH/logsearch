@@ -1,0 +1,14 @@
+.{
+    // Vendored from https://github.com/mnemnion/mvzr tag v0.3.12 and patched
+    // for compatibility with Zig 0.17.0.
+    .name = .mvzr,
+    .version = "0.3.12",
+    .fingerprint = 0xd3af654ccba42365,
+    .minimum_zig_version = "0.17.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+    },
+}

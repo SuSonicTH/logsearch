@@ -1,34 +1,51 @@
 const std = @import("std");
-const MemMapper = @import("memMapper").MemMapper;
 const mvzr = @import("mvzr");
 
 const LogReader = @This();
 
-file: std.fs.File,
-mapper: MemMapper,
+io: std.Io,
+file: std.Io.File,
+memory_map: ?std.Io.File.MemoryMap,
 data: []const u8,
 pos: u64 = 0,
 matcher: *LogReader.Matcher,
 
-pub fn init(fileName: []const u8, matcher: *LogReader.Matcher) !LogReader {
-    const file = try std.fs.cwd().openFile(fileName, .{});
-    errdefer file.close();
+pub fn init(io: std.Io, fileName: []const u8, matcher: *LogReader.Matcher) !LogReader {
+    const file = try std.Io.Dir.cwd().openFile(io, fileName, .{});
+    errdefer file.close(io);
 
-    var mapper = try MemMapper.init(file, false);
-    errdefer mapper.deinit();
+    const size = (try file.stat(io)).size;
+    if (size == 0) {
+        return .{
+            .io = io,
+            .file = file,
+            .memory_map = null,
+            .data = &.{},
+            .matcher = matcher,
+        };
+    }
+
+    var memory_map = try file.createMemoryMap(io, .{
+        .len = @intCast(size),
+        .protection = .{ .read = true },
+        .populate = false,
+    });
+    errdefer memory_map.destroy(io);
 
     return .{
+        .io = io,
         .file = file,
-        .mapper = mapper,
-        .data = try mapper.map(u8, .{}),
+        .memory_map = memory_map,
+        .data = memory_map.memory,
         .matcher = matcher,
     };
 }
 
 pub fn deinit(self: *LogReader) void {
-    self.mapper.unmap(self.data);
-    self.mapper.deinit();
-    self.file.close();
+    if (self.memory_map) |*memory_map| {
+        memory_map.destroy(self.io);
+    }
+    self.file.close(self.io);
 }
 
 pub fn next(self: *LogReader) ?LogLine {
@@ -67,32 +84,19 @@ pub const Pattern = struct {
     order: []const u8 = "tlc",
 
     fn getLinePattern(self: *Pattern) ![]const u8 {
-        var fba: std.heap.FixedBufferAllocator = .init(&self.buffer);
-        const allocator = fba.allocator();
+        var writer = std.Io.Writer.fixed(&self.buffer);
 
-        var pattern = std.array_list.Managed(u8).init(allocator);
-        defer pattern.deinit();
-
-        for (self.order) |patternType| {
+        for (self.order, 0..) |patternType, index| {
+            if (index > 0) try writer.writeByte(' ');
             switch (patternType) {
-                't' => {
-                    if (pattern.items.len > 0) try pattern.append(' ');
-                    try pattern.appendSlice(self.time);
-                },
-                'l' => {
-                    if (pattern.items.len > 0) try pattern.append(' ');
-                    try pattern.appendSlice(self.level);
-                },
-
-                'c' => {
-                    if (pattern.items.len > 0) try pattern.append(' ');
-                    try pattern.appendSlice(self.class);
-                },
+                't' => try writer.writeAll(self.time),
+                'l' => try writer.writeAll(self.level),
+                'c' => try writer.writeAll(self.class),
                 else => @panic("unknown pattern type"),
             }
         }
 
-        return pattern.items;
+        return writer.buffered();
     }
 };
 
@@ -154,3 +158,47 @@ pub const LogLine = struct {
         };
     }
 };
+
+test "line pattern" {
+    var pattern: Pattern = .{};
+    const actual = try pattern.getLinePattern();
+    try std.testing.expectEqualStrings(
+        "^\\d\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d,\\d\\d\\d \\[[A-Za-z]+\\] [^ ]+",
+        actual,
+    );
+}
+
+test "parse log line" {
+    var pattern: Pattern = .{};
+    var matcher = try Matcher.compile(&pattern);
+    const parsed = LogLine.get("2024-01-01 12:00:01,000 [ERROR] com.example.Db connection failed", &matcher);
+    try std.testing.expectEqualStrings("[ERROR]", parsed.level);
+    try std.testing.expectEqualStrings("com.example.Db", parsed.class);
+    try std.testing.expectEqualStrings("connection failed", parsed.message);
+}
+
+test "iterate log lines" {
+    var pattern: Pattern = .{};
+    var matcher = try Matcher.compile(&pattern);
+    const data =
+        "2024-01-01 12:00:00,000 [INFO] com.example.App started\n" ++
+        "2024-01-01 12:00:01,000 [ERROR] com.example.Db connection failed\n" ++
+        "2024-01-01 12:00:02,000 [DEBUG] com.example.App tick\n";
+    var reader = LogReader{
+        .io = std.testing.io,
+        .file = undefined,
+        .memory_map = null,
+        .data = data,
+        .matcher = &matcher,
+    };
+    const first = reader.next().?;
+    try std.testing.expectEqualStrings("[INFO]", first.level);
+    try std.testing.expectEqualStrings("com.example.App", first.class);
+    const second = reader.next().?;
+    try std.testing.expectEqualStrings("[ERROR]", second.level);
+    try std.testing.expectEqualStrings("com.example.Db", second.class);
+    const third = reader.next().?;
+    try std.testing.expectEqualStrings("[DEBUG]", third.level);
+    try std.testing.expectEqualStrings("com.example.App", third.class);
+    try std.testing.expect(reader.next() == null);
+}

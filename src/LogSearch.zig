@@ -3,11 +3,13 @@ const LogReader = @import("LogReader.zig");
 const mvzr = @import("mvzr");
 
 const LogSearch = @This();
+io: std.Io,
 options: *Options,
 matcher: *LogReader.Matcher,
 
-pub fn init(options: *Options, matcher: *LogReader.Matcher) LogSearch {
+pub fn init(io: std.Io, options: *Options, matcher: *LogReader.Matcher) LogSearch {
     return .{
+        .io = io,
         .options = options,
         .matcher = matcher,
     };
@@ -21,11 +23,11 @@ const line = "------------------------------------------------------------------
 
 pub fn run(self: *LogSearch) !void {
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer = std.Io.File.stdout().writer(self.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
     for (self.options.files.?.items) |fileName| {
-        var logIter = try LogReader.init(fileName, self.matcher);
+        var logIter = try LogReader.init(self.io, fileName, self.matcher);
         defer logIter.deinit();
 
         while (logIter.next()) |logline| {
@@ -79,10 +81,10 @@ inline fn messageMatches(self: *LogSearch, message: []const u8) bool {
 
 pub const Options = struct {
     allocator: std.mem.Allocator,
-    levels: ?std.array_list.Managed([]const u8) = null,
-    classes: ?std.array_list.Managed([]const u8) = null,
-    expressions: ?std.array_list.Managed(mvzr.Regex) = null,
-    files: ?std.array_list.Managed([]const u8) = null,
+    levels: ?std.ArrayList([]const u8) = null,
+    classes: ?std.ArrayList([]const u8) = null,
+    expressions: ?std.ArrayList(mvzr.Regex) = null,
+    files: ?std.ArrayList([]const u8) = null,
     pattern: LogReader.Pattern = .{},
     outputLines: bool = false,
 
@@ -93,42 +95,55 @@ pub const Options = struct {
     }
 
     pub fn deinit(self: *Options) void {
-        if (self.levels) |levels| {
-            levels.deinit();
+        if (self.levels) |*levels| {
+            levels.deinit(self.allocator);
         }
-        if (self.files) |files| {
-            files.deinit();
+        if (self.files) |*files| {
+            files.deinit(self.allocator);
         }
-        if (self.expressions) |expressions| {
-            expressions.deinit();
+        if (self.expressions) |*expressions| {
+            expressions.deinit(self.allocator);
+        }
+        if (self.classes) |*classes| {
+            classes.deinit(self.allocator);
         }
     }
 
     pub fn addLevel(self: *Options, level: []const u8) !void {
         if (self.levels == null) {
-            self.levels = std.array_list.Managed([]const u8).init(self.allocator);
+            self.levels = .empty;
         }
-        try self.levels.?.append(level);
+        try self.levels.?.append(self.allocator, level);
     }
 
     pub fn addClass(self: *Options, class: []const u8) !void {
         if (self.classes == null) {
-            self.classes = std.array_list.Managed([]const u8).init(self.allocator);
+            self.classes = .empty;
         }
-        try self.classes.?.append(class);
+        try self.classes.?.append(self.allocator, class);
     }
 
     pub fn addExpression(self: *Options, regex: []const u8) !void {
         if (self.expressions == null) {
-            self.expressions = std.array_list.Managed(mvzr.Regex).init(self.allocator);
+            self.expressions = .empty;
         }
-        try self.expressions.?.append(mvzr.compile(regex).?);
+        try self.expressions.?.append(self.allocator, mvzr.compile(regex).?);
     }
 
     pub fn addFile(self: *Options, file: []const u8) !void {
         if (self.files == null) {
-            self.files = std.array_list.Managed([]const u8).init(self.allocator);
+            self.files = .empty;
         }
-        try self.files.?.append(file);
+        try self.files.?.append(self.allocator, file);
     }
 };
+
+test "level filtering" {
+    var options = Options.init(std.testing.allocator);
+    defer options.deinit();
+    try options.addLevel("[ERROR]");
+    try std.testing.expectEqual(1, options.levels.?.items.len);
+    var search = LogSearch.init(std.testing.io, &options, undefined);
+    try std.testing.expect(search.levelMatches("[ERROR]"));
+    try std.testing.expect(!search.levelMatches("[INFO]"));
+}
