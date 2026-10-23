@@ -20,7 +20,7 @@ const Argument = enum {
     @"--outputLines",
 };
 
-const version = "logsearch 0.2";
+const version = "logsearch 0.3.0";
 const help = @embedFile("USAGE.txt");
 
 var skip_next: bool = false;
