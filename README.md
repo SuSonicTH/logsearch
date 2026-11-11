@@ -60,12 +60,17 @@ usage: logsearch [OPTIONS] logfile [logfile2]...
 OPTIONS:
     --help               print this help screen
     --version            print version and license
-    --show-manual        show the manual (this README) in a pager
+    --show-manual        show the manual (README) in a pager
 
   filtering:
     --level,-l <LEVEL>   only show entries with level equal to <LEVEL>
+                         (brackets are optional)
     --class,-c <CLASS>   only show entries with the given class/logger name
     --search,-s <REGEX>  only show entries whose message matches <REGEX>
+
+  --level, --class and --search can each be used multiple times.
+  Within one option, any value may match (OR). Across options, one value
+  of each given option must match (AND).
 
   logPattern:
     --timePattern <pattern>  default ^\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d
@@ -75,7 +80,7 @@ OPTIONS:
                              (time, then level, then class)
 
   output:
-    --outputLines        print a separator line between log entries
+    --outputLines        print a separator line after each log entry
 ```
 
 Positional arguments are one or more logfiles, which are processed in the order given.
