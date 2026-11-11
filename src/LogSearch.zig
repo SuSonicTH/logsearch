@@ -54,13 +54,28 @@ pub fn run(self: *LogSearch) !void {
 inline fn levelMatches(self: *LogSearch, level: []const u8) bool {
     if (self.options.levels) |levels| {
         for (levels.items) |expectedLevel| {
-            if (std.mem.eql(u8, expectedLevel, level)) {
+            if (levelEql(expectedLevel, level)) {
                 return true;
             }
         }
         return false;
     }
     return true;
+}
+
+/// Compares level names independently of the surrounding brackets. With the
+/// default level pattern the captured level is `[ERROR]`, but users commonly
+/// pass just `ERROR` (and custom patterns may capture either form).
+fn levelEql(expected: []const u8, actual: []const u8) bool {
+    if (std.mem.eql(u8, expected, actual)) return true;
+    return std.mem.eql(u8, withoutBrackets(expected), withoutBrackets(actual));
+}
+
+fn withoutBrackets(level: []const u8) []const u8 {
+    if (level.len >= 3 and level[0] == '[' and level[level.len - 1] == ']') {
+        return level[1 .. level.len - 1];
+    }
+    return level;
 }
 
 inline fn classMatches(self: *LogSearch, class: []const u8) bool {
@@ -172,5 +187,17 @@ test "level filtering" {
     try std.testing.expectEqual(1, options.levels.?.items.len);
     var search = LogSearch.init(std.testing.io, &options, undefined);
     try std.testing.expect(search.levelMatches("[ERROR]"));
+    try std.testing.expect(search.levelMatches("ERROR"));
     try std.testing.expect(!search.levelMatches("[INFO]"));
+}
+
+test "level filtering accepts brackets in expected value" {
+    var options = Options.init(std.testing.allocator);
+    defer options.deinit();
+    try options.addLevel("WARN");
+    var search = LogSearch.init(std.testing.io, &options, undefined);
+    try std.testing.expect(search.levelMatches("[WARN]"));
+    try std.testing.expect(search.levelMatches("WARN"));
+    try std.testing.expect(!search.levelMatches("[ERROR]"));
+    try std.testing.expect(!search.levelMatches("ERROR"));
 }

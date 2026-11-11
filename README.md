@@ -105,8 +105,9 @@ written directly to stdout.
 If an option is not given at all, it does not restrict the output.
 
 Level and class values are compared literally against the captured text. With the default
-patterns, the captured level includes the brackets (`[ERROR]`), and the class is the token
-directly following the level.
+patterns, the captured level includes the brackets (`[ERROR]`), but the brackets may be
+omitted when filtering, so `-l ERROR` and `-l "[ERROR]"` are equivalent. The class is the
+token directly following the level.
 
 `--search` takes a regular expression that is matched against the message part only,
 i.e. everything after the timestamp, level and class.

@@ -6,7 +6,7 @@ OPTIONS:
     --show-manual        show the manual (README) in a pager
 
   filtering:
-    --level,-l <LEVEL>   only show level equal to <LEVEL>
+    --level,-l <LEVEL>   only show level equal to <LEVEL> (brackets optional)
     --class,-c <CLASS>   only show matching <CLASS>
     --search,-s <REGEX>  search for log messages matching <REGEX>
 
