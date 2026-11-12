@@ -1,4 +1,5 @@
 const std = @import("std");
+const package = @import("build.zig.zon");
 
 const TargetConfig = struct {
     query: std.Target.Query,
@@ -120,7 +121,10 @@ fn compileModule(
     const license_module = embeddedModule(b, embedded_files, "license.zig", "LICENSE.txt", target, optimize);
     const readme_module = embeddedModule(b, embedded_files, "readme.zig", "README.md", target, optimize);
 
-    return b.createModule(.{
+    const build_options = b.addOptions();
+    build_options.addOption([]const u8, "version", package.version);
+
+    const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -131,6 +135,8 @@ fn compileModule(
             .{ .name = "readme", .module = readme_module },
         },
     });
+    module.addOptions("build_options", build_options);
+    return module;
 }
 
 /// `@embedFile` cannot reach outside the module root, so expose an embedded

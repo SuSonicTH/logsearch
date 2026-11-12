@@ -2,6 +2,7 @@ const std = @import("std");
 const LogSearch = @import("LogSearch.zig");
 const Manual = @import("Manual.zig");
 const TimeRange = @import("TimeRange.zig").TimeRange;
+const build_options = @import("build_options");
 const license = @import("license");
 
 const Argument = enum {
@@ -23,7 +24,6 @@ const Argument = enum {
     @"--outputLines",
 };
 
-const version = "logsearch 0.4.0";
 const help = @embedFile("USAGE.txt");
 
 var skip_next: bool = false;
@@ -38,8 +38,11 @@ pub fn parse(io: std.Io, options: *LogSearch.Options, args: []const []const u8) 
             switch (std.meta.stringToEnum(Argument, arg) orelse {
                 try exitError(io, "error: argument {d} is unknown '{s}'\n", .{ index, arg });
             }) {
-                .@"--help" => try printInfoAndExit(io, version ++ "\n" ++ help),
-                .@"--version" => try printInfoAndExit(io, version ++ "\n\n" ++ license.text),
+                .@"--help" => try printInfoAndExit(io, "logsearch " ++ build_options.version ++ "\n" ++ help),
+                .@"--version" => try printInfoAndExit(
+                    io,
+                    "logsearch " ++ build_options.version ++ "\n\n" ++ license.text,
+                ),
                 .@"--show-manual" => {
                     try Manual.show(io);
                     std.process.exit(0);
