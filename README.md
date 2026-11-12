@@ -67,10 +67,17 @@ OPTIONS:
                          (brackets are optional)
     --class,-c <CLASS>   only show entries with the given class/logger name
     --search,-s <REGEX>  only show entries whose message matches <REGEX>
+    --start <DATETIME>   only show entries at or after <DATETIME>
+    --end <DATETIME>     only show entries at or before <DATETIME>
 
   --level, --class and --search can each be used multiple times.
   Within one option, any value may match (OR). Across options, one value
   of each given option must match (AND).
+
+  --start/--end accept YYYY-MM, YYYY-MM-DD, or YYYY-MM-DD HH[:MM[:SS]].
+  A T may separate date and time; an optional ,mmm or .mmm is accepted.
+  Both bounds are inclusive; quote values containing spaces.
+  Files ending in YYYY-MM-DD are skipped when that day is outside the range.
 
   logPattern:
     --timePattern <pattern>  default ^\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d
@@ -116,6 +123,31 @@ token directly following the level.
 
 `--search` takes a regular expression that is matched against the message part only,
 i.e. everything after the timestamp, level and class.
+
+### Date and time ranges
+
+`--start` and `--end` select entries by their timestamp. Both bounds are inclusive and
+use the wall-clock time written in the log (no timezone conversion). A partial datetime
+describes a whole period, so the start uses the first moment of that period and the end
+uses the last:
+
+| Value | `--start` means | `--end` means |
+| --- | --- | --- |
+| `2025-10` | 2025-10-01 00:00:00.000 | 2025-10-31 23:59:59.999 |
+| `2025-10-08` | 2025-10-08 00:00:00.000 | 2025-10-08 23:59:59.999 |
+| `2025-10-08 09` | 2025-10-08 09:00:00.000 | 2025-10-08 09:59:59.999 |
+| `2025-10-08 09:30` | 2025-10-08 09:30:00.000 | 2025-10-08 09:30:59.999 |
+| `2025-10-08 09:30:01` | 2025-10-08 09:30:01.000 | 2025-10-08 09:30:01.999 |
+
+A `T` may be used between the date and time, and an optional fractional second
+(`,mmm` or `.mmm`) is accepted. Values containing a space must be quoted.
+
+If a filename ends in `YYYY-MM-DD` (for example `app.log.2025-10-19`), the file is skipped
+without being opened when that entire day falls outside the requested range. Files
+without a date suffix, such as the current `app.log`, are always read.
+
+Range filtering uses the timestamp text captured by `--timePattern`. If a custom pattern
+captures something that is not one of the formats above, LogSearch reports an error.
 
 ### Log patterns
 
@@ -173,6 +205,18 @@ Combine filters and search multiple files, with separators between entries:
 
 ```sh
 logsearch -l "[ERROR]" -s "timeout" --outputLines app.log app.log.1
+```
+
+Show entries from October 2025:
+
+```sh
+logsearch --start 2025-10 --end 2025-10 logs/BlackMed.log.2025-10-*
+```
+
+Show a one-hour window:
+
+```sh
+logsearch --start "2025-10-19 09:00" --end "2025-10-19 10:00" logs/*
 ```
 
 Use a custom layout where the level comes first:

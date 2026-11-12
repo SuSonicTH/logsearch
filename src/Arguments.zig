@@ -1,6 +1,7 @@
 const std = @import("std");
 const LogSearch = @import("LogSearch.zig");
 const Manual = @import("Manual.zig");
+const TimeRange = @import("TimeRange.zig").TimeRange;
 const license = @import("license");
 
 const Argument = enum {
@@ -13,6 +14,8 @@ const Argument = enum {
     @"-s",
     @"--class",
     @"-c",
+    @"--start",
+    @"--end",
     @"--timePattern",
     @"--levelPattern",
     @"--classPattern",
@@ -42,8 +45,42 @@ pub fn parse(io: std.Io, options: *LogSearch.Options, args: []const []const u8) 
                     std.process.exit(0);
                 },
                 .@"--level", .@"-l" => try options.addLevel(try argumentValue(io, args, index, arg)),
-                .@"--search", .@"-s" => try options.addExpression(try argumentValue(io, args, index, arg)),
+                .@"--search", .@"-s" => {
+                    const value = try argumentValue(io, args, index, arg);
+                    options.addExpression(value) catch |err| switch (err) {
+                        error.InvalidRegex => try exitError(io, "error: invalid --search regex '{s}'\n", .{value}),
+                        else => return err,
+                    };
+                },
                 .@"--class", .@"-c" => try options.addClass(try argumentValue(io, args, index, arg)),
+                .@"--start" => {
+                    if (options.range.start != null) {
+                        try exitError(io, "error: --start specified more than once\n", .{});
+                    }
+                    const value = try argumentValue(io, args, index, arg);
+                    options.range.start = TimeRange.parseStart(value) catch {
+                        try exitError(
+                            io,
+                            "error: invalid --start datetime '{s}' " ++
+                                "(expected YYYY-MM, YYYY-MM-DD, or YYYY-MM-DD HH[:MM[:SS]])\n",
+                            .{value},
+                        );
+                    };
+                },
+                .@"--end" => {
+                    if (options.range.end != null) {
+                        try exitError(io, "error: --end specified more than once\n", .{});
+                    }
+                    const value = try argumentValue(io, args, index, arg);
+                    options.range.end = TimeRange.parseEnd(value) catch {
+                        try exitError(
+                            io,
+                            "error: invalid --end datetime '{s}' " ++
+                                "(expected YYYY-MM, YYYY-MM-DD, or YYYY-MM-DD HH[:MM[:SS]])\n",
+                            .{value},
+                        );
+                    };
+                },
                 .@"--timePattern" => options.pattern.time = try argumentValue(io, args, index, arg),
                 .@"--levelPattern" => options.pattern.level = try argumentValue(io, args, index, arg),
                 .@"--classPattern" => options.pattern.class = try argumentValue(io, args, index, arg),
@@ -52,6 +89,18 @@ pub fn parse(io: std.Io, options: *LogSearch.Options, args: []const []const u8) 
             }
         } else {
             try options.addFile(arg);
+        }
+    }
+
+    if (!isValidPatternOrder(options.pattern.order)) {
+        try exitError(io, "error: --patternOrder must be a permutation of 'tlc'\n", .{});
+    }
+
+    if (options.range.start) |start| {
+        if (options.range.end) |end| {
+            if (start > end) {
+                try exitError(io, "error: --start is later than --end\n", .{});
+            }
         }
     }
 
@@ -69,6 +118,34 @@ fn argumentValue(io: std.Io, args: []const []const u8, index: usize, argument: [
     return args[pos];
 }
 
+fn isValidPatternOrder(order: []const u8) bool {
+    if (order.len != 3) return false;
+
+    var seen_t = false;
+    var seen_l = false;
+    var seen_c = false;
+
+    for (order) |c| {
+        switch (c) {
+            't' => {
+                if (seen_t) return false;
+                seen_t = true;
+            },
+            'l' => {
+                if (seen_l) return false;
+                seen_l = true;
+            },
+            'c' => {
+                if (seen_c) return false;
+                seen_c = true;
+            },
+            else => return false,
+        }
+    }
+
+    return seen_t and seen_l and seen_c;
+}
+
 fn printInfoAndExit(io: std.Io, info: []const u8) !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
@@ -79,7 +156,7 @@ fn printInfoAndExit(io: std.Io, info: []const u8) !void {
     std.process.exit(0);
 }
 
-fn exitError(io: std.Io, comptime message: []const u8, args: anytype) !noreturn {
+pub fn exitError(io: std.Io, comptime message: []const u8, args: anytype) !noreturn {
     var stderr_buffer: [1024]u8 = undefined;
     var stderr_writer = std.Io.File.stderr().writer(io, &stderr_buffer);
     const stderr = &stderr_writer.interface;
@@ -97,4 +174,24 @@ test "parse level" {
     try std.testing.expectEqual(1, options.levels.?.items.len);
     try std.testing.expectEqualStrings("[ERROR]", options.levels.?.items[0]);
     try std.testing.expectEqual(1, options.files.?.items.len);
+}
+
+test "parse time range" {
+    var options = LogSearch.Options.init(std.testing.allocator);
+    defer options.deinit();
+    const args = [_][]const u8{ "logsearch", "--start", "2025-10-19", "--end", "2025-10-19 23:59", "file.log" };
+    try parse(std.testing.io, &options, &args);
+    try std.testing.expectEqual(try TimeRange.parseStart("2025-10-19"), options.range.start.?);
+    try std.testing.expectEqual(try TimeRange.parseEnd("2025-10-19 23:59"), options.range.end.?);
+    try std.testing.expectEqual(1, options.files.?.items.len);
+}
+
+test "pattern order validation" {
+    try std.testing.expect(isValidPatternOrder("tlc"));
+    try std.testing.expect(isValidPatternOrder("ltc"));
+    try std.testing.expect(isValidPatternOrder("ctl"));
+    try std.testing.expect(!isValidPatternOrder("tlc "));
+    try std.testing.expect(!isValidPatternOrder("ttc"));
+    try std.testing.expect(!isValidPatternOrder("tl"));
+    try std.testing.expect(!isValidPatternOrder("tld"));
 }

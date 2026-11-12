@@ -10,10 +10,17 @@ OPTIONS:
                          (brackets are optional)
     --class,-c <CLASS>   only show entries with the given class/logger name
     --search,-s <REGEX>  only show entries whose message matches <REGEX>
+    --start <DATETIME>   only show entries at or after <DATETIME>
+    --end <DATETIME>     only show entries at or before <DATETIME>
 
   --level, --class and --search can each be used multiple times.
   Within one option, any value may match (OR). Across options, one value
   of each given option must match (AND).
+
+  --start/--end accept YYYY-MM, YYYY-MM-DD, or YYYY-MM-DD HH[:MM[:SS]].
+  A T may separate date and time; an optional ,mmm or .mmm is accepted.
+  Both bounds are inclusive; quote values containing spaces.
+  Files ending in YYYY-MM-DD are skipped when that day is outside the range.
 
   logPattern:
     --timePattern <pattern>  default ^\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d

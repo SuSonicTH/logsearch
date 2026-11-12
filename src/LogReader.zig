@@ -126,7 +126,7 @@ pub const Pattern = struct {
                 't' => self.time,
                 'l' => self.level,
                 'c' => self.class,
-                else => @panic("unknown pattern type"),
+                else => return error.InvalidPatternOrder,
             };
             if (component.len > 0 and component[0] == '^') {
                 try writer.writeAll(component[1..]);
@@ -139,6 +139,15 @@ pub const Pattern = struct {
     }
 };
 
+pub const CompileError = error{
+    InvalidPatternOrder,
+    PatternTooLong,
+    InvalidLinePattern,
+    InvalidTimePattern,
+    InvalidLevelPattern,
+    InvalidClassPattern,
+};
+
 pub const Matcher = struct {
     line: mvzr.Regex,
     time: mvzr.Regex,
@@ -149,12 +158,21 @@ pub const Matcher = struct {
     /// allows the much cheaper hand-written parser to be used.
     fast: bool,
 
-    pub fn compile(pattern: *Pattern) !Matcher {
+    pub fn compile(pattern: *Pattern) CompileError!Matcher {
+        const time = mvzr.compile(pattern.time) orelse return error.InvalidTimePattern;
+        const level = mvzr.compile(pattern.level) orelse return error.InvalidLevelPattern;
+        const class = mvzr.compile(pattern.class) orelse return error.InvalidClassPattern;
+
+        const line_pattern = pattern.getLinePattern() catch |err| switch (err) {
+            error.InvalidPatternOrder => return error.InvalidPatternOrder,
+            else => return error.PatternTooLong,
+        };
+
         return .{
-            .line = mvzr.compile(try pattern.getLinePattern()).?,
-            .time = mvzr.compile(pattern.time).?,
-            .level = mvzr.compile(pattern.level).?,
-            .class = mvzr.compile(pattern.class).?,
+            .line = mvzr.compile(line_pattern) orelse return error.InvalidLinePattern,
+            .time = time,
+            .level = level,
+            .class = class,
             .order = pattern.order,
             .fast = pattern.isDefault(),
         };
@@ -163,15 +181,17 @@ pub const Matcher = struct {
 
 pub const LogLine = struct {
     line: []const u8,
+    time: []const u8,
     level: []const u8,
     class: []const u8,
     message: []const u8,
 
-    pub fn get(line: []const u8, matcher: *LogReader.Matcher) LogLine {
+    pub fn get(line: []const u8, matcher: *LogReader.Matcher) ?LogLine {
         if (matcher.fast and isTimestamp(line)) {
             if (parseFast(line)) |fields| {
                 return .{
                     .line = line,
+                    .time = line[0..23],
                     .level = fields.level,
                     .class = fields.class,
                     .message = fields.message,
@@ -183,34 +203,40 @@ pub const LogLine = struct {
 
     /// Fast path for the built-in `tlc` layout:
     /// `YYYY-MM-DD HH:MM:SS,mmm [LEVEL] class message`
-    fn getRegex(line: []const u8, matcher: *LogReader.Matcher) LogLine {
+    fn getRegex(line: []const u8, matcher: *LogReader.Matcher) ?LogLine {
         var pos: usize = 0;
 
+        var time: []const u8 = "";
         var level: []const u8 = "";
         var class: []const u8 = "";
 
         for (matcher.order) |patternType| {
             switch (patternType) {
                 't' => {
-                    const match = matcher.time.match(line[pos..]).?;
-                    pos += match.end + 1;
+                    const match = matcher.time.match(line[pos..]) orelse return null;
+                    time = match.slice;
+                    pos += match.end;
                 },
                 'c' => {
-                    const match = matcher.class.match(line[pos..]).?;
+                    const match = matcher.class.match(line[pos..]) orelse return null;
                     class = match.slice;
-                    pos += match.end + 1;
+                    pos += match.end;
                 },
                 'l' => {
-                    const match = matcher.level.match(line[pos..]).?;
+                    const match = matcher.level.match(line[pos..]) orelse return null;
                     level = match.slice;
-                    pos += match.end + 1;
+                    pos += match.end;
                 },
                 else => unreachable,
             }
+            // Components are separated by one space; the final component may
+            // end at the end of the line with no message.
+            if (pos < line.len and line[pos] == ' ') pos += 1;
         }
 
         return .{
             .line = line,
+            .time = time,
             .level = level,
             .class = class,
             .message = line[pos..],
@@ -282,13 +308,49 @@ test "line pattern is always anchored" {
     _ = try Matcher.compile(&pattern);
 }
 
+test "invalid regex patterns return errors" {
+    var time_pattern: Pattern = .{ .time = "[" };
+    try std.testing.expectError(error.InvalidTimePattern, Matcher.compile(&time_pattern));
+
+    var level_pattern: Pattern = .{ .level = "[" };
+    try std.testing.expectError(error.InvalidLevelPattern, Matcher.compile(&level_pattern));
+
+    var class_pattern: Pattern = .{ .class = "[" };
+    try std.testing.expectError(error.InvalidClassPattern, Matcher.compile(&class_pattern));
+}
+
 test "parse log line" {
     var pattern: Pattern = .{};
     var matcher = try Matcher.compile(&pattern);
-    const parsed = LogLine.get("2024-01-01 12:00:01,000 [ERROR] com.example.Db connection failed", &matcher);
+    const parsed = LogLine.get("2024-01-01 12:00:01,000 [ERROR] com.example.Db connection failed", &matcher).?;
+    try std.testing.expectEqualStrings("2024-01-01 12:00:01,000", parsed.time);
     try std.testing.expectEqualStrings("[ERROR]", parsed.level);
     try std.testing.expectEqualStrings("com.example.Db", parsed.class);
     try std.testing.expectEqualStrings("connection failed", parsed.message);
+}
+
+test "regex parser captures time in custom order" {
+    var pattern: Pattern = .{ .order = "ltc" };
+    var matcher = try Matcher.compile(&pattern);
+    const parsed = LogLine.get("[ERROR] 2024-01-01 12:00:01,000 com.example.Db connection failed", &matcher).?;
+    try std.testing.expectEqualStrings("2024-01-01 12:00:01,000", parsed.time);
+    try std.testing.expectEqualStrings("[ERROR]", parsed.level);
+    try std.testing.expectEqualStrings("com.example.Db", parsed.class);
+    try std.testing.expectEqualStrings("connection failed", parsed.message);
+}
+
+test "regex parser handles empty message" {
+    var pattern: Pattern = .{ .order = "ltc" };
+    var matcher = try Matcher.compile(&pattern);
+    const parsed = LogLine.get("[INFO] 2024-01-01 12:00:01,000 com.x", &matcher).?;
+    try std.testing.expectEqualStrings("", parsed.message);
+}
+
+test "non-entry lines are not parsed" {
+    var pattern: Pattern = .{};
+    var matcher = try Matcher.compile(&pattern);
+    try std.testing.expect(LogLine.get("", &matcher) == null);
+    try std.testing.expect(LogLine.get("header line", &matcher) == null);
 }
 
 test "fast parse matches regex parser" {
@@ -301,8 +363,9 @@ test "fast parse matches regex parser" {
         "2024-01-01 12:00:01,000 [DEBUG] x",
     };
     for (lines) |line| {
-        const fast = LogLine.get(line, &matcher);
-        const slow = LogLine.getRegex(line, &matcher);
+        const fast = LogLine.get(line, &matcher).?;
+        const slow = LogLine.getRegex(line, &matcher).?;
+        try std.testing.expectEqualStrings(slow.time, fast.time);
         try std.testing.expectEqualStrings(slow.level, fast.level);
         try std.testing.expectEqualStrings(slow.class, fast.class);
         try std.testing.expectEqualStrings(slow.message, fast.message);
@@ -348,13 +411,13 @@ test "iterate log lines" {
         .data = data,
         .matcher = &matcher,
     };
-    const first = LogLine.get(reader.next().?, &matcher);
+    const first = LogLine.get(reader.next().?, &matcher).?;
     try std.testing.expectEqualStrings("[INFO]", first.level);
     try std.testing.expectEqualStrings("com.example.App", first.class);
-    const second = LogLine.get(reader.next().?, &matcher);
+    const second = LogLine.get(reader.next().?, &matcher).?;
     try std.testing.expectEqualStrings("[ERROR]", second.level);
     try std.testing.expectEqualStrings("com.example.Db", second.class);
-    const third = LogLine.get(reader.next().?, &matcher);
+    const third = LogLine.get(reader.next().?, &matcher).?;
     try std.testing.expectEqualStrings("[DEBUG]", third.level);
     try std.testing.expectEqualStrings("com.example.App", third.class);
     try std.testing.expect(reader.next() == null);
